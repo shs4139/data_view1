@@ -14,13 +14,18 @@ def load_hit_data(file_buffer):
     first_line = file_buffer.readline().decode('utf-8').strip()
     headers = [h.strip() for h in first_line.split('\t')] # Assuming tab separated based on prompt
 
-    # Check if headers are separated by spaces or tabs
-    if len(headers) <= 1:
-        # Try splitting by whitespace if tab didn't work
-        headers = [h.strip() for h in first_line.split()]
-        sep = r'\s+'
-    else:
+    # Check if headers are separated by spaces, tabs, or commas
+    if len(headers) > 1:
         sep = '\t'
+    else:
+        # Try comma
+        headers = [h.strip() for h in first_line.split(',')]
+        if len(headers) > 1:
+            sep = ','
+        else:
+            # Try splitting by whitespace
+            headers = [h.strip() for h in first_line.split()]
+            sep = r'\s+'
 
     # Now read the full data
     file_buffer.seek(0)
@@ -41,6 +46,8 @@ def load_hit_data(file_buffer):
 
     if sep == '\t':
         data_cols = len(first_data_line.split('\t'))
+    elif sep == ',':
+        data_cols = len(first_data_line.split(','))
     else:
         data_cols = len(first_data_line.split())
 
@@ -64,17 +71,31 @@ def load_track_data(file_buffer):
     file_buffer.seek(0)
     # Detect separator
     first_line = file_buffer.readline().decode('utf-8')
-    sep = '\t' if '\t' in first_line else r'\s+'
+    if '\t' in first_line:
+        sep = '\t'
+    elif ',' in first_line:
+        sep = ','
+    else:
+        sep = r'\s+'
     file_buffer.seek(0)
     return pd.read_csv(file_buffer, sep=sep)
 
 def load_relation_data(file_buffer):
     file_buffer.seek(0)
     first_line = file_buffer.readline().decode('utf-8')
-    sep = '\t' if '\t' in first_line else ',' # Relations might be comma or tab
-
-    # If the example: "TrackID HitList" (tab)
-    # "1 739,740..."
+    # Relations might be comma or tab.
+    # Example: "TrackID HitList" could be tab.
+    # Data: "1, 123,456" or "1 \t 123,456"
+    if '\t' in first_line:
+        sep = '\t'
+    elif ',' in first_line:
+        # Caution: The HitList column itself contains commas.
+        # But usually standard CSV handles quoted strings "123,456".
+        # Or it might be semicolon separated?
+        # Given the prompt, let's assume standard CSV or Tab.
+        sep = ','
+    else:
+        sep = r'\s+'
 
     file_buffer.seek(0)
     df = pd.read_csv(file_buffer, sep=sep)

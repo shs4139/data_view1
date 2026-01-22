@@ -28,7 +28,7 @@ def generate_dummy_data(output_dir="."):
     # 2. Simulation Settings
     num_tracks = 5
     time_steps = 20
-    doppler_bins_count = 32
+    doppler_bins_count = 70 # Increased to test truncation (limit 60)
 
     hits_data = []
     tracks_data = []

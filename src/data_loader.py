@@ -60,12 +60,16 @@ def load_hit_data(file_buffer):
     file_buffer.seek(0)
     df = pd.read_csv(file_buffer, sep=sep, names=new_headers, header=0)
 
-    # Collect all doppler columns into a single column of lists/arrays for easier processing?
-    # Or keep them as columns?
-    # For STFT, having them as an array in a single cell is nice, or just filter columns.
-    # Let's keep them as columns but identify them.
+    # Limit to first 60 Doppler bins if there are more
+    max_doppler_bins = 60
+    if num_doppler > max_doppler_bins:
+        doppler_cols = [f"doppler_{i}" for i in range(max_doppler_bins)]
+        # Optionally drop extra columns if needed, but for now just returning the valid list is enough
+        # The app logic uses `doppler_cols` to extract data.
+    else:
+        doppler_cols = [f"doppler_{i}" for i in range(num_doppler)]
 
-    return df, [f"doppler_{i}" for i in range(num_doppler)]
+    return df, doppler_cols
 
 def load_track_data(file_buffer):
     file_buffer.seek(0)

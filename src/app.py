@@ -16,14 +16,34 @@ st.title("Radar Data Analysis & Visualization")
 st.sidebar.header("Configuration")
 
 # 1. File Inputs
-st.sidebar.subheader("Data Upload")
+st.sidebar.subheader("Data Source")
+data_dir = st.sidebar.text_input("Data Directory Path", value="")
+st.sidebar.text("OR Upload Files:")
 hit_file = st.sidebar.file_uploader("Hit Data (CSV)", type=["csv", "txt"])
 track_file = st.sidebar.file_uploader("Track Data (CSV)", type=["csv", "txt"])
 relation_file = st.sidebar.file_uploader("Relation Data (CSV)", type=["csv", "txt"])
 
 use_dummy = False
-if not (hit_file and track_file and relation_file):
-    st.sidebar.info("Using Dummy Data (Upload files to override)")
+load_from_dir = False
+
+if hit_file and track_file and relation_file:
+    # 1. Use Uploaded Files
+    pass
+elif data_dir and os.path.isdir(data_dir):
+    # 2. Use Directory
+    h_path = os.path.join(data_dir, "out_hitinfo.csv")
+    t_path = os.path.join(data_dir, "out_trackinfo.csv")
+    r_path = os.path.join(data_dir, "track_hitlist_global.csv")
+
+    if os.path.exists(h_path) and os.path.exists(t_path) and os.path.exists(r_path):
+        load_from_dir = True
+        st.sidebar.success(f"Loaded from {data_dir}")
+    else:
+        st.sidebar.error("Required files not found in directory.")
+        use_dummy = True
+else:
+    # 3. Use Dummy
+    st.sidebar.info("Using Dummy Data (Upload files or set valid directory)")
     use_dummy = True
 
 # 2. Radar Geometry
@@ -39,7 +59,7 @@ min_velocity = st.sidebar.number_input("Min Track Velocity", value=0.0)
 
 # --- Data Loading ---
 @st.cache_data
-def load_data(h_file, t_file, r_file, _use_dummy=False):
+def load_data(h_file, t_file, r_file, _use_dummy=False, _load_from_dir=False, _dir_path=""):
     if _use_dummy:
         base_dir = "data"
         if not os.path.exists(base_dir):
@@ -51,14 +71,24 @@ def load_data(h_file, t_file, r_file, _use_dummy=False):
             with st.spinner("Generating Dummy Data..."):
                 generate_dummy_data(base_dir)
 
-        # Load from disk
         with open(os.path.join(base_dir, "hit_data.csv"), "rb") as f:
             hits, doppler_cols = load_hit_data(f)
         with open(os.path.join(base_dir, "track_data.csv"), "rb") as f:
             tracks = load_track_data(f)
         with open(os.path.join(base_dir, "relation_data.csv"), "rb") as f:
             relations = load_relation_data(f)
+
+    elif _load_from_dir:
+        # Load from specified directory with fixed filenames
+        with open(os.path.join(_dir_path, "out_hitinfo.csv"), "rb") as f:
+            hits, doppler_cols = load_hit_data(f)
+        with open(os.path.join(_dir_path, "out_trackinfo.csv"), "rb") as f:
+            tracks = load_track_data(f)
+        with open(os.path.join(_dir_path, "track_hitlist_global.csv"), "rb") as f:
+            relations = load_relation_data(f)
+
     else:
+        # Use Uploaded Files
         hits, doppler_cols = load_hit_data(h_file)
         tracks = load_track_data(t_file)
         relations = load_relation_data(r_file)
@@ -66,7 +96,7 @@ def load_data(h_file, t_file, r_file, _use_dummy=False):
     return hits, tracks, relations, doppler_cols
 
 try:
-    hits_df, tracks_df, relations_df, doppler_cols = load_data(hit_file, track_file, relation_file, use_dummy)
+    hits_df, tracks_df, relations_df, doppler_cols = load_data(hit_file, track_file, relation_file, use_dummy, load_from_dir, data_dir)
 except Exception as e:
     st.error(f"Error loading data: {e}")
     st.stop()

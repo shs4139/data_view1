@@ -2,8 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import tkinter as tk
+from tkinter import filedialog
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
-from geometry import spherical_to_cartesian, transform_radar_coords
+from geometry import calculate_coordinates
 from visualizer import plot_3d_tracks, plot_doppler_spectrogram, plot_doppler_spectrum
 from analysis import prepare_doppler_spectrogram, analyze_tracks_ai
 from utils import generate_dummy_data
@@ -17,7 +19,30 @@ st.sidebar.header("Configuration")
 
 # 1. File Inputs
 st.sidebar.subheader("Data Source")
-data_dir = st.sidebar.text_input("Data Directory Path", value="")
+
+# Helper to open folder dialog
+if "data_dir" not in st.session_state:
+    st.session_state["data_dir"] = ""
+
+col_dir1, col_dir2 = st.sidebar.columns([3, 1])
+with col_dir1:
+    data_dir_input = st.text_input("Data Directory Path", value=st.session_state["data_dir"], key="dir_input")
+with col_dir2:
+    if st.button("Browse"):
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.wm_attributes('-topmost', 1)
+            folder_selected = filedialog.askdirectory(master=root)
+            root.destroy()
+            if folder_selected:
+                st.session_state["data_dir"] = folder_selected
+                st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Cannot open folder dialog: {e}")
+
+data_dir = st.session_state["data_dir"] if st.session_state["data_dir"] else data_dir_input
+
 st.sidebar.text("OR Upload Files:")
 hit_file = st.sidebar.file_uploader("Hit Data (CSV)", type=["csv", "txt"])
 track_file = st.sidebar.file_uploader("Track Data (CSV)", type=["csv", "txt"])
@@ -49,7 +74,7 @@ else:
 # 2. Radar Geometry
 st.sidebar.subheader("Radar Geometry")
 radar_height = st.sidebar.number_input("Radar Height (m)", value=0.0)
-radar_tilt = st.sidebar.number_input("Radar Tilt (deg, Elevation offset)", value=0.0)
+# Tilt removed as per new logic requirement
 radar_dir = st.sidebar.number_input("Radar Direction (deg, Azimuth offset)", value=0.0)
 
 # 3. Filters
@@ -109,7 +134,7 @@ if hits_df is None:
 st.sidebar.markdown("---")
 st.sidebar.text("Processing Coordinates...")
 
-# Calculate Cartesian Local
+# Calculate Cartesian
 # Ensure column names match. The dummy data has 'range', 'azimuth', 'elevation'.
 # Make sure casing matches.
 hits_df.columns = [c.strip() for c in hits_df.columns]
@@ -118,14 +143,13 @@ if not all(col in hits_df.columns for col in req_cols):
     st.error(f"Hit data missing required columns: {req_cols}. Found: {hits_df.columns}")
     st.stop()
 
-x_loc, y_loc, z_loc = spherical_to_cartesian(
+x_w, y_w, z_w = calculate_coordinates(
     hits_df['range'].values,
     hits_df['azimuth'].values,
-    hits_df['elevation'].values
+    hits_df['elevation'].values,
+    radar_height,
+    radar_dir
 )
-
-# Apply Radar Config
-x_w, y_w, z_w = transform_radar_coords(x_loc, y_loc, z_loc, radar_height, radar_tilt, radar_dir)
 
 hits_df['X'] = x_w
 hits_df['Y'] = y_w

@@ -7,7 +7,7 @@ import numpy as np
 sys.path.append(os.path.abspath("src"))
 
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
-from geometry import spherical_to_cartesian, transform_radar_coords
+from geometry import calculate_coordinates
 from analysis import prepare_doppler_spectrogram, analyze_tracks_ai
 from visualizer import plot_3d_tracks
 
@@ -16,33 +16,31 @@ def test_pipeline():
 
     # 1. Load Dummy Data
     print("Loading Data...")
-    with open("data/hit_data.csv", "rb") as f:
-        # data_loader expects a file-like object with .read(), .seek(), .readline()
-        # "rb" opens as bytes, which our loader handles (decodes utf-8)
-        # Wait, my loader uses .readline().decode('utf-8').
-        # If I open in "r" (text mode), I don't need decode.
-        # Streamlit file uploader is binary (BytesIO).
-        # So opening in "rb" is correct for simulating Streamlit.
-        hits, doppler_cols = load_hit_data(f)
-
-    with open("data/track_data.csv", "rb") as f:
-        tracks = load_track_data(f)
-
-    with open("data/relation_data.csv", "rb") as f:
-        relations = load_relation_data(f)
+    try:
+        with open("data/hit_data.csv", "rb") as f:
+            hits, doppler_cols = load_hit_data(f)
+        with open("data/track_data.csv", "rb") as f:
+            tracks = load_track_data(f)
+        with open("data/relation_data.csv", "rb") as f:
+            relations = load_relation_data(f)
+    except FileNotFoundError:
+        print("Data files not found. Please generate dummy data first.")
+        return
 
     print(f"Loaded {len(hits)} hits, {len(tracks)} tracks, {len(relations)} relations.")
-    print(f"Doppler Cols: {len(doppler_cols)}")
 
     # 2. Geometry
     print("Testing Geometry...")
     hits.columns = [c.strip() for c in hits.columns]
-    x_loc, y_loc, z_loc = spherical_to_cartesian(
+
+    x_w, y_w, z_w = calculate_coordinates(
         hits['range'].values,
         hits['azimuth'].values,
-        hits['elevation'].values
+        hits['elevation'].values,
+        radar_height=10,
+        radar_direction=45
     )
-    x_w, y_w, z_w = transform_radar_coords(x_loc, y_loc, z_loc, 10, 5, 45)
+
     hits['X'] = x_w
     hits['Y'] = y_w
     hits['Z'] = z_w
@@ -67,7 +65,7 @@ def test_pipeline():
     res, feats = analyze_tracks_ai(tracks)
     print(f"Clustering Result: {res['Cluster'].unique()}")
 
-    # 5. Visualizer (just check if fig creates)
+    # 5. Visualizer
     print("Testing Visualizer...")
     fig = plot_3d_tracks(tracks, hits)
     print("Figure Created.")

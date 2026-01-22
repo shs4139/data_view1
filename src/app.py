@@ -1,0 +1,326 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import os
+from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
+from geometry import spherical_to_cartesian, transform_radar_coords
+from visualizer import plot_3d_tracks, plot_doppler_spectrogram, plot_doppler_spectrum
+from analysis import prepare_doppler_spectrogram, analyze_tracks_ai
+from utils import generate_dummy_data
+
+st.set_page_config(page_title="Radar Data Analyst", layout="wide")
+
+st.title("Radar Data Analysis & Visualization")
+
+# --- Sidebar: Configuration & Inputs ---
+st.sidebar.header("Configuration")
+
+# 1. File Inputs
+st.sidebar.subheader("Data Upload")
+hit_file = st.sidebar.file_uploader("Hit Data (CSV)", type=["csv", "txt"])
+track_file = st.sidebar.file_uploader("Track Data (CSV)", type=["csv", "txt"])
+relation_file = st.sidebar.file_uploader("Relation Data (CSV)", type=["csv", "txt"])
+
+use_dummy = False
+if not (hit_file and track_file and relation_file):
+    st.sidebar.info("Using Dummy Data (Upload files to override)")
+    use_dummy = True
+
+# 2. Radar Geometry
+st.sidebar.subheader("Radar Geometry")
+radar_height = st.sidebar.number_input("Radar Height (m)", value=0.0)
+radar_tilt = st.sidebar.number_input("Radar Tilt (deg, Elevation offset)", value=0.0)
+radar_dir = st.sidebar.number_input("Radar Direction (deg, Azimuth offset)", value=0.0)
+
+# 3. Filters
+st.sidebar.subheader("Filters")
+min_power = st.sidebar.number_input("Min Hit Power", value=0)
+min_velocity = st.sidebar.number_input("Min Track Velocity", value=0.0)
+
+# --- Data Loading ---
+@st.cache_data
+def load_data(h_file, t_file, r_file, _use_dummy=False):
+    if _use_dummy:
+        base_dir = "data"
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+
+        # Check if files exist, if not generate
+        required_files = ["hit_data.csv", "track_data.csv", "relation_data.csv"]
+        if not all(os.path.exists(os.path.join(base_dir, f)) for f in required_files):
+            with st.spinner("Generating Dummy Data..."):
+                generate_dummy_data(base_dir)
+
+        # Load from disk
+        with open(os.path.join(base_dir, "hit_data.csv"), "rb") as f:
+            hits, doppler_cols = load_hit_data(f)
+        with open(os.path.join(base_dir, "track_data.csv"), "rb") as f:
+            tracks = load_track_data(f)
+        with open(os.path.join(base_dir, "relation_data.csv"), "rb") as f:
+            relations = load_relation_data(f)
+    else:
+        hits, doppler_cols = load_hit_data(h_file)
+        tracks = load_track_data(t_file)
+        relations = load_relation_data(r_file)
+
+    return hits, tracks, relations, doppler_cols
+
+try:
+    hits_df, tracks_df, relations_df, doppler_cols = load_data(hit_file, track_file, relation_file, use_dummy)
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
+
+if hits_df is None:
+    st.warning("No data available. Please generate dummy data or upload files.")
+    st.stop()
+
+# --- Preprocessing: Coordinate Transform ---
+st.sidebar.markdown("---")
+st.sidebar.text("Processing Coordinates...")
+
+# Calculate Cartesian Local
+# Ensure column names match. The dummy data has 'range', 'azimuth', 'elevation'.
+# Make sure casing matches.
+hits_df.columns = [c.strip() for c in hits_df.columns]
+req_cols = ['range', 'azimuth', 'elevation']
+if not all(col in hits_df.columns for col in req_cols):
+    st.error(f"Hit data missing required columns: {req_cols}. Found: {hits_df.columns}")
+    st.stop()
+
+x_loc, y_loc, z_loc = spherical_to_cartesian(
+    hits_df['range'].values,
+    hits_df['azimuth'].values,
+    hits_df['elevation'].values
+)
+
+# Apply Radar Config
+x_w, y_w, z_w = transform_radar_coords(x_loc, y_loc, z_loc, radar_height, radar_tilt, radar_dir)
+
+hits_df['X'] = x_w
+hits_df['Y'] = y_w
+hits_df['Z'] = z_w
+
+# Merge Data
+# We merge to associate Hits with TrackIDs
+merged_df = merge_data(tracks_df, hits_df, relations_df, doppler_cols)
+
+# --- Apply Filters ---
+# 1. Hit Power
+if min_power > 0:
+    hits_df = hits_df[hits_df['power'] >= min_power]
+    merged_df = merged_df[merged_df['power'] >= min_power]
+
+# 2. Track Velocity
+# Calculate velocity magnitude for tracks
+tracks_df['Velocity'] = np.sqrt(tracks_df['VX']**2 + tracks_df['VY']**2 + tracks_df['VZ']**2)
+if min_velocity > 0:
+    # Filter tracks by average velocity > min
+    track_avg_v = tracks_df.groupby('TrackID')['Velocity'].mean()
+    valid_track_ids = track_avg_v[track_avg_v >= min_velocity].index
+    tracks_df = tracks_df[tracks_df['TrackID'].isin(valid_track_ids)]
+    # Also filter merged
+    merged_df = merged_df[merged_df['TrackID'].isin(valid_track_ids)]
+
+# --- Global Statistics ---
+st.write(f"**Loaded:** {len(tracks_df['TrackID'].unique())} Tracks, {len(hits_df)} Hits (Filtered)")
+
+# --- Tabs ---
+tab1, tab2, tab3, tab4 = st.tabs(["3D Visualization", "Doppler Analysis", "AI Classification", "Data Export"])
+
+# === Tab 1: 3D Visualization ===
+with tab1:
+    st.subheader("3D Trajectory & Hits")
+
+    col_ctrl1, col_ctrl2 = st.columns([1, 2])
+
+    with col_ctrl1:
+        # Filter by Track ID
+        track_ids = sorted(tracks_df['TrackID'].unique())
+        selected_track_id = st.selectbox("Select Track to View (Highlight)", [None] + list(track_ids))
+
+    with col_ctrl2:
+        # Time Slider (Playback)
+        # Find min/max scan
+        min_scan = int(tracks_df['ScanNum'].min()) if not tracks_df.empty else 0
+        max_scan = int(tracks_df['ScanNum'].max()) if not tracks_df.empty else 100
+
+        enable_playback = st.checkbox("Enable Playback Mode")
+        if enable_playback:
+            current_scan = st.slider("Time (Scan Number)", min_scan, max_scan, min_scan)
+        else:
+            current_scan = max_scan
+
+    # Prepare data for plotting
+    plot_tracks = tracks_df
+    plot_hits = hits_df
+
+    if enable_playback:
+        # Filter Hits to current scan
+        plot_hits = plot_hits[plot_hits['ScanNum'] == current_scan]
+
+        # Filter Tracks: Show full history up to current scan? Or just current point?
+        # Usually full history is nice.
+        plot_tracks = plot_tracks[plot_tracks['ScanNum'] <= current_scan]
+
+        # If we want to show the "head" of the track differently, we can do that in visualizer,
+        # but for now standard plot is okay.
+
+    if selected_track_id:
+        # Filter Hits to only those in the track (and scan if playback)
+        track_hits_subset = merged_df[merged_df['TrackID'] == selected_track_id]
+
+        if enable_playback:
+            track_hits_subset = track_hits_subset[track_hits_subset['ScanNum'] == current_scan]
+
+        fig = plot_3d_tracks(plot_tracks, hits_df=track_hits_subset, show_hits=True)
+
+        # Add visual lines connecting Track Points to Hits
+        t_data = plot_tracks[plot_tracks['TrackID'] == selected_track_id]
+
+        import plotly.graph_objects as go
+
+        # Add connection lines
+        connector_x = []
+        connector_y = []
+        connector_z = []
+
+        # If playback is enabled, we only want connections for the current scan (if track exists in this scan)
+        if enable_playback:
+            t_scan = t_data[t_data['ScanNum'] == current_scan]
+            # If track exists in this scan
+            if not t_scan.empty:
+                # Use just this row
+                iter_data = t_scan
+            else:
+                iter_data = pd.DataFrame()
+        else:
+            iter_data = t_data
+
+        for _, t_row in iter_data.iterrows():
+            scan = t_row['ScanNum']
+            h_data = track_hits_subset[track_hits_subset['ScanNum'] == scan]
+
+            tx, ty, tz = t_row['X'], t_row['Y'], t_row['Z']
+
+            for _, h_row in h_data.iterrows():
+                hx, hy, hz = h_row['X'], h_row['Y'], h_row['Z']
+                connector_x.extend([tx, hx, None])
+                connector_y.extend([ty, hy, None])
+                connector_z.extend([tz, hz, None])
+
+        if connector_x:
+            fig.add_trace(go.Scatter3d(
+                x=connector_x, y=connector_y, z=connector_z,
+                mode='lines',
+                line=dict(color='rgba(200,200,200,0.5)', width=1),
+                name='Association'
+            ))
+
+    else:
+        # Show all hits (filtered by playback)
+        fig = plot_3d_tracks(plot_tracks, plot_hits, show_hits=True)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+# === Tab 2: Doppler Analysis ===
+with tab2:
+    st.subheader("Doppler Analysis")
+
+    if selected_track_id:
+        track_hits_subset = merged_df[merged_df['TrackID'] == selected_track_id]
+
+        if track_hits_subset.empty:
+            st.info("No hits associated with this track.")
+        else:
+            # 1. STFT (Spectrogram)
+            spectrogram, time_labels = prepare_doppler_spectrogram(track_hits_subset, doppler_cols)
+            st.write("### Track Spectrogram (STFT)")
+            st.plotly_chart(plot_doppler_spectrogram(spectrogram, time_labels), use_container_width=True)
+
+            # 2. Point-wise Inspection
+            st.write("### Point-wise Doppler Inspection")
+            selected_scan = st.selectbox("Select Scan Number", sorted(track_hits_subset['ScanNum'].unique()))
+
+            scan_hits = track_hits_subset[track_hits_subset['ScanNum'] == selected_scan]
+
+            cols = st.columns(2)
+            for idx, (i, hit) in enumerate(scan_hits.iterrows()):
+                # Extract doppler bin values
+                d_vals = hit[doppler_cols].values
+
+                with cols[idx % 2]:
+                    st.plotly_chart(plot_doppler_spectrum(d_vals, title=f"Hit {hit['hitId']} (Scan {selected_scan})"), use_container_width=True)
+
+    else:
+        st.info("Please select a Track ID in the sidebar or Tab 1 to view Doppler analysis.")
+
+# === Tab 3: AI Classification ===
+with tab3:
+    st.subheader("AI Object Classification")
+
+    if st.button("Run Classification Analysis"):
+        with st.spinner("Analyzing Track Features..."):
+            classified_tracks, feature_df = analyze_tracks_ai(tracks_df)
+
+        st.success("Analysis Complete")
+
+        col1, col2 = st.columns([1, 2])
+
+        with col1:
+            st.write("### Cluster Groups")
+            st.dataframe(feature_df[['TrackID', 'Cluster', 'AvgV', 'AvgZ']])
+
+        with col2:
+            st.write("### Cluster Visualization")
+            # Scatter plot of features
+            import plotly.express as px
+            fig_ai = px.scatter(
+                feature_df,
+                x='AvgV', y='AvgZ',
+                color='Cluster',
+                hover_data=['TrackID'],
+                title="Clustering Result: Velocity vs Altitude"
+            )
+            st.plotly_chart(fig_ai, use_container_width=True)
+
+        st.markdown("""
+        **Methodology:**
+        - **Features**: Average Velocity, Max Altitude, Velocity Standard Deviation (Maneuver), Average RCS.
+        - **Algorithm**: K-Means Clustering (k=3).
+        - **Purpose**: Group unidentified tracks into potential classes (e.g., Birds, Drones, Aircraft) based on kinematics.
+        """)
+
+# === Tab 4: Data Export ===
+with tab4:
+    st.subheader("Data Export")
+
+    if selected_track_id:
+        st.write(f"Export data for **Track {selected_track_id}**")
+
+        # Prepare Data
+        t_export = tracks_df[tracks_df['TrackID'] == selected_track_id]
+        h_export = merged_df[merged_df['TrackID'] == selected_track_id]
+
+        # Convert to CSV
+        t_csv = t_export.to_csv(index=False).encode('utf-8')
+        h_csv = h_export.to_csv(index=False).encode('utf-8')
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.download_button(
+                label=f"Download Track {selected_track_id} Data",
+                data=t_csv,
+                file_name=f"track_{selected_track_id}.csv",
+                mime="text/csv"
+            )
+        with c2:
+            st.download_button(
+                label=f"Download Hits for Track {selected_track_id}",
+                data=h_csv,
+                file_name=f"hits_track_{selected_track_id}.csv",
+                mime="text/csv"
+            )
+
+    else:
+        st.info("Select a Track to enable export options.")

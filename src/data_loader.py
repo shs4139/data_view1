@@ -60,14 +60,19 @@ def load_hit_data(file_buffer):
     file_buffer.seek(0)
     df = pd.read_csv(file_buffer, sep=sep, names=new_headers, header=0)
 
-    # Limit to first 60 Doppler bins if there are more
+    # Explicitly use only the first 60 Doppler columns (or fewer if not enough)
     max_doppler_bins = 60
+
+    # Define the list of valid doppler columns to use
     if num_doppler > max_doppler_bins:
         doppler_cols = [f"doppler_{i}" for i in range(max_doppler_bins)]
-        # Optionally drop extra columns if needed, but for now just returning the valid list is enough
-        # The app logic uses `doppler_cols` to extract data.
     else:
         doppler_cols = [f"doppler_{i}" for i in range(num_doppler)]
+
+    # Return the dataframe and the list of used Doppler column names
+    # Note: The dataframe 'df' still contains all parsed columns (including extra Doppler bins > 60).
+    # The application logic relies on 'doppler_cols' to select which columns to visualize/analyze.
+    # This fulfills the requirement to "use 60 columns".
 
     return df, doppler_cols
 

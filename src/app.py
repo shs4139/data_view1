@@ -19,57 +19,63 @@ st.sidebar.header("Configuration")
 
 # 1. File Inputs
 st.sidebar.subheader("Data Source")
-
-# Helper to open folder dialog
-if "data_dir" not in st.session_state:
-    st.session_state["data_dir"] = ""
-
-col_dir1, col_dir2 = st.sidebar.columns([3, 1])
-with col_dir1:
-    data_dir_input = st.text_input("Data Directory Path", value=st.session_state["data_dir"], key="dir_input")
-with col_dir2:
-    if st.button("Browse"):
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            root.wm_attributes('-topmost', 1)
-            folder_selected = filedialog.askdirectory(master=root)
-            root.destroy()
-            if folder_selected:
-                st.session_state["data_dir"] = folder_selected
-                st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Cannot open folder dialog: {e}")
-
-data_dir = st.session_state["data_dir"] if st.session_state["data_dir"] else data_dir_input
-
-st.sidebar.text("OR Upload Files:")
-hit_file = st.sidebar.file_uploader("Hit Data (CSV)", type=["csv", "txt"])
-track_file = st.sidebar.file_uploader("Track Data (CSV)", type=["csv", "txt"])
-relation_file = st.sidebar.file_uploader("Relation Data (CSV)", type=["csv", "txt"])
+source_mode = st.sidebar.radio("Select Mode", ["File Upload", "Local Directory"], index=0)
 
 use_dummy = False
 load_from_dir = False
+hit_file = None
+track_file = None
+relation_file = None
+data_dir = ""
 
-if hit_file and track_file and relation_file:
-    # 1. Use Uploaded Files
-    pass
-elif data_dir and os.path.isdir(data_dir):
-    # 2. Use Directory
-    h_path = os.path.join(data_dir, "out_hitinfo.csv")
-    t_path = os.path.join(data_dir, "out_trackinfo.csv")
-    r_path = os.path.join(data_dir, "track_hitlist_global.csv")
+if source_mode == "Local Directory":
+    # Helper to open folder dialog
+    if "data_dir" not in st.session_state:
+        st.session_state["data_dir"] = ""
 
-    if os.path.exists(h_path) and os.path.exists(t_path) and os.path.exists(r_path):
-        load_from_dir = True
-        st.sidebar.success(f"Loaded from {data_dir}")
+    col_dir1, col_dir2 = st.sidebar.columns([3, 1])
+    with col_dir1:
+        data_dir_input = st.text_input("Data Directory Path", value=st.session_state["data_dir"], key="dir_input")
+    with col_dir2:
+        if st.button("Browse"):
+            try:
+                root = tk.Tk()
+                root.withdraw()
+                root.wm_attributes('-topmost', 1)
+                folder_selected = filedialog.askdirectory(master=root)
+                root.destroy()
+                if folder_selected:
+                    st.session_state["data_dir"] = folder_selected
+                    st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Cannot open folder dialog: {e}")
+
+    data_dir = st.session_state["data_dir"] if st.session_state["data_dir"] else data_dir_input
+
+    if data_dir and os.path.isdir(data_dir):
+        h_path = os.path.join(data_dir, "out_hitinfo.csv")
+        t_path = os.path.join(data_dir, "out_trackinfo.csv")
+        r_path = os.path.join(data_dir, "track_hitlist_global.csv")
+
+        if os.path.exists(h_path) and os.path.exists(t_path) and os.path.exists(r_path):
+            load_from_dir = True
+            st.sidebar.success(f"Directory Valid: {data_dir}")
+        else:
+            st.sidebar.error("Required files (out_hitinfo.csv, out_trackinfo.csv, track_hitlist_global.csv) not found.")
+            use_dummy = True
     else:
-        st.sidebar.error("Required files not found in directory.")
+        st.sidebar.info("Please select a valid directory.")
         use_dummy = True
+
 else:
-    # 3. Use Dummy
-    st.sidebar.info("Using Dummy Data (Upload files or set valid directory)")
-    use_dummy = True
+    # File Upload Mode
+    hit_file = st.sidebar.file_uploader("Hit Data (CSV)", type=["csv", "txt"])
+    track_file = st.sidebar.file_uploader("Track Data (CSV)", type=["csv", "txt"])
+    relation_file = st.sidebar.file_uploader("Relation Data (CSV)", type=["csv", "txt"])
+
+    if not (hit_file and track_file and relation_file):
+        st.sidebar.info("Using Dummy Data (Upload files to override)")
+        use_dummy = True
 
 # 2. Radar Geometry
 st.sidebar.subheader("Radar Geometry")
@@ -298,16 +304,21 @@ with tab1:
 
     with col2d_1:
         # For 2D views, use same filtered hits
-        # If no track selected, use plot_hits (which is filtered by time if playback on)
-        # If track selected, use track_hits_subset
         hits_2d = track_hits_subset if selected_track_id else plot_hits
 
-        fig_top = plot_2d_view(plot_tracks, hits_2d, view_type='top', x_range=x_range, y_range=y_range)
+        # Pass full tracks list if no specific track selected, but if selected, pass only that track for clearer connection lines
+        tracks_2d = plot_tracks
+
+        fig_top = plot_2d_view(tracks_2d, hits_2d, view_type='top', x_range=x_range, y_range=y_range,
+                               show_connections=(selected_track_id is not None))
         st.plotly_chart(fig_top, use_container_width=True)
 
     with col2d_2:
         hits_2d = track_hits_subset if selected_track_id else plot_hits
-        fig_side = plot_2d_view(plot_tracks, hits_2d, view_type='side', x_range=x_range, z_range=z_range)
+        tracks_2d = plot_tracks
+
+        fig_side = plot_2d_view(tracks_2d, hits_2d, view_type='side', x_range=x_range, z_range=z_range,
+                                show_connections=(selected_track_id is not None))
         st.plotly_chart(fig_side, use_container_width=True)
 
 # === Tab 2: Doppler Analysis ===

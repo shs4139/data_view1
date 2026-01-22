@@ -53,10 +53,11 @@ def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True, x_range=None, y_rang
     )
     return fig
 
-def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range=None, z_range=None):
+def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range=None, z_range=None, show_connections=False):
     """
     Creates a 2D scatter plot (Top or Side View).
     view_type: 'top' (X-Y) or 'side' (X-Z)
+    show_connections: If True, draws lines between track points and associated hits (filtered).
     """
     fig = go.Figure()
 
@@ -89,6 +90,33 @@ def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range
             name='Hits',
             marker=dict(size=3, color='gray', opacity=0.5)
         ))
+
+        # Connections
+        if show_connections:
+            # Assumes hits_df is already filtered to associate with tracks_df (or specific track)
+            connector_x = []
+            connector_y = []
+
+            # Iterate through tracks to find matching hits by ScanNum
+            for _, t_row in tracks_df.iterrows():
+                scan = t_row['ScanNum']
+                # Hits for this scan in the filtered hits df
+                h_data = hits_df[hits_df['ScanNum'] == scan]
+
+                tx, ty = t_row[x_col], t_row[y_col]
+
+                for _, h_row in h_data.iterrows():
+                    hx, hy = h_row[x_col], h_row[y_col]
+                    connector_x.extend([tx, hx, None])
+                    connector_y.extend([ty, hy, None])
+
+            if connector_x:
+                fig.add_trace(go.Scatter(
+                    x=connector_x, y=connector_y,
+                    mode='lines',
+                    line=dict(color='rgba(200,200,200,0.5)', width=1),
+                    name='Association'
+                ))
 
     # Layout
     layout_args = dict(

@@ -55,18 +55,26 @@ def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True):
 
 def plot_doppler_spectrogram(spectrogram, time_labels):
     """
-    Plots the Doppler Spectrogram (Heatmap).
+    Plots the Doppler Spectrogram (Heatmap) in dB.
     spectrogram: (FrequencyBins x TimeSteps)
     """
+    # Ensure numeric
+    spec_vals = np.array(spectrogram, dtype=float)
+
+    # Convert to dB
+    epsilon = 1e-9
+    spec_db = 20 * np.log10(np.abs(spec_vals) + epsilon)
+
     fig = go.Figure(data=go.Heatmap(
-        z=spectrogram,
+        z=spec_db,
         x=time_labels,
         # y=Frequency Bins (Indices)
-        colorscale='Viridis'
+        colorscale='Viridis',
+        colorbar=dict(title="Amplitude (dB)")
     ))
 
     fig.update_layout(
-        title="Doppler Spectrogram (STFT)",
+        title="Doppler Spectrogram (STFT) - dB",
         xaxis_title="Scan / Time",
         yaxis_title="Doppler Bin Index"
     )

@@ -2,7 +2,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
 
-def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True):
+def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True, x_range=None, y_range=None, z_range=None):
     """
     Creates a 3D scatter plot of tracks and optionally hits.
     """
@@ -26,8 +26,6 @@ def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True):
     if show_hits and hits_df is not None and not hits_df.empty:
         # We assume hits_df has transformed X, Y, Z columns
         if 'X' in hits_df.columns:
-            # Color by Doppler Intensity or ID?
-            # Let's use a distinct color or symbol
             fig.add_trace(go.Scatter3d(
                 x=hits_df['X'], y=hits_df['Y'], z=hits_df['Z'],
                 mode='markers',
@@ -38,19 +36,73 @@ def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True):
                       for _, row in hits_df.iterrows()]
             ))
 
-            # Draw lines between Track Point and Hits?
-            # This might be too cluttered if there are many hits.
-            # Only do this if specific track is selected (handled in main app logic usually).
+    # Update Layout with Axis Ranges
+    scene_dict = dict(
+        xaxis_title='X (East)',
+        yaxis_title='Y (North)',
+        zaxis_title='Z (Up)'
+    )
+    if x_range: scene_dict['xaxis'] = dict(range=x_range)
+    if y_range: scene_dict['yaxis'] = dict(range=y_range)
+    if z_range: scene_dict['zaxis'] = dict(range=z_range)
 
     fig.update_layout(
         title="3D Track & Hit Visualization",
-        scene=dict(
-            xaxis_title='X (East)',
-            yaxis_title='Y (North)',
-            zaxis_title='Z (Up)'
-        ),
+        scene=scene_dict,
         margin=dict(l=0, r=0, b=0, t=40)
     )
+    return fig
+
+def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range=None, z_range=None):
+    """
+    Creates a 2D scatter plot (Top or Side View).
+    view_type: 'top' (X-Y) or 'side' (X-Z)
+    """
+    fig = go.Figure()
+
+    if view_type == 'top':
+        x_col, y_col = 'X', 'Y'
+        title = "Top View (X-Y)"
+        yaxis_title = "Y (North)"
+        y_axis_range = y_range
+    else: # side
+        x_col, y_col = 'X', 'Z'
+        title = "Side View (X-Z)"
+        yaxis_title = "Z (Up)"
+        y_axis_range = z_range
+
+    # Plot Tracks
+    for tid in tracks_df['TrackID'].unique():
+        t_data = tracks_df[tracks_df['TrackID'] == tid]
+        fig.add_trace(go.Scatter(
+            x=t_data[x_col], y=t_data[y_col],
+            mode='lines+markers',
+            name=f'Track {tid}',
+            marker=dict(size=5)
+        ))
+
+    # Plot Hits
+    if hits_df is not None and not hits_df.empty:
+        fig.add_trace(go.Scatter(
+            x=hits_df[x_col], y=hits_df[y_col],
+            mode='markers',
+            name='Hits',
+            marker=dict(size=3, color='gray', opacity=0.5)
+        ))
+
+    # Layout
+    layout_args = dict(
+        title=title,
+        xaxis_title="X (East)",
+        yaxis_title=yaxis_title,
+        xaxis=dict(range=x_range) if x_range else None,
+        yaxis=dict(range=y_axis_range) if y_axis_range else None,
+        margin=dict(l=0, r=0, b=0, t=40)
+    )
+    # Remove None values
+    layout_args = {k: v for k, v in layout_args.items() if v is not None}
+
+    fig.update_layout(**layout_args)
     return fig
 
 def plot_doppler_spectrogram(spectrogram, time_labels):

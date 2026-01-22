@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import filedialog
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
 from geometry import calculate_coordinates
-from visualizer import plot_3d_tracks, plot_doppler_spectrogram, plot_doppler_spectrum
+from visualizer import plot_3d_tracks, plot_2d_view, plot_doppler_spectrogram, plot_doppler_spectrum
 from analysis import prepare_doppler_spectrogram, analyze_tracks_ai
 from utils import generate_dummy_data
 
@@ -81,6 +81,21 @@ radar_dir = st.sidebar.number_input("Radar Direction (deg, Azimuth offset)", val
 st.sidebar.subheader("Filters")
 min_power = st.sidebar.number_input("Min Hit Power", value=0)
 min_velocity = st.sidebar.number_input("Min Track Velocity", value=0.0)
+
+# 4. Visualization Settings
+st.sidebar.subheader("Axis Ranges (Optional)")
+st.sidebar.caption("Leave 0 to auto-scale")
+x_min = st.sidebar.number_input("X Min", value=0.0)
+x_max = st.sidebar.number_input("X Max", value=0.0)
+y_min = st.sidebar.number_input("Y Min", value=0.0)
+y_max = st.sidebar.number_input("Y Max", value=0.0)
+z_min = st.sidebar.number_input("Z Min", value=0.0)
+z_max = st.sidebar.number_input("Z Max", value=0.0)
+
+# Helper to construct ranges
+x_range = [x_min, x_max] if x_min != x_max else None
+y_range = [y_min, y_max] if y_min != y_max else None
+z_range = [z_min, z_max] if z_min != z_max else None
 
 # --- Data Loading ---
 @st.cache_data
@@ -227,7 +242,7 @@ with tab1:
         if enable_playback:
             track_hits_subset = track_hits_subset[track_hits_subset['ScanNum'] == current_scan]
 
-        fig = plot_3d_tracks(plot_tracks, hits_df=track_hits_subset, show_hits=True)
+        fig = plot_3d_tracks(plot_tracks, hits_df=track_hits_subset, show_hits=True, x_range=x_range, y_range=y_range, z_range=z_range)
 
         # Add visual lines connecting Track Points to Hits
         t_data = plot_tracks[plot_tracks['TrackID'] == selected_track_id]
@@ -273,9 +288,27 @@ with tab1:
 
     else:
         # Show all hits (filtered by playback)
-        fig = plot_3d_tracks(plot_tracks, plot_hits, show_hits=True)
+        fig = plot_3d_tracks(plot_tracks, plot_hits, show_hits=True, x_range=x_range, y_range=y_range, z_range=z_range)
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # 2D Views
+    st.markdown("### 2D Projections")
+    col2d_1, col2d_2 = st.columns(2)
+
+    with col2d_1:
+        # For 2D views, use same filtered hits
+        # If no track selected, use plot_hits (which is filtered by time if playback on)
+        # If track selected, use track_hits_subset
+        hits_2d = track_hits_subset if selected_track_id else plot_hits
+
+        fig_top = plot_2d_view(plot_tracks, hits_2d, view_type='top', x_range=x_range, y_range=y_range)
+        st.plotly_chart(fig_top, use_container_width=True)
+
+    with col2d_2:
+        hits_2d = track_hits_subset if selected_track_id else plot_hits
+        fig_side = plot_2d_view(plot_tracks, hits_2d, view_type='side', x_range=x_range, z_range=z_range)
+        st.plotly_chart(fig_side, use_container_width=True)
 
 # === Tab 2: Doppler Analysis ===
 with tab2:

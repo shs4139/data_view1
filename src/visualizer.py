@@ -74,15 +74,23 @@ def plot_doppler_spectrogram(spectrogram, time_labels):
 
 def plot_doppler_spectrum(doppler_values, title="Doppler Spectrum"):
     """
-    Line chart for a single hit's doppler.
+    Line chart for a single hit's doppler in dB.
     """
+    # Ensure values are numeric float (handles object arrays)
+    d_vals = np.array(doppler_values, dtype=float)
+
+    # Convert to dB: 20 * log10(abs(amplitude))
+    # Handle zeros by adding epsilon
+    epsilon = 1e-9
+    doppler_db = 20 * np.log10(np.abs(d_vals) + epsilon)
+
     fig = go.Figure(data=go.Scatter(
-        y=doppler_values,
+        y=doppler_db,
         mode='lines+markers'
     ))
     fig.update_layout(
         title=title,
         xaxis_title="Bin Index",
-        yaxis_title="Amplitude"
+        yaxis_title="Amplitude (dB)"
     )
     return fig

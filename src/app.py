@@ -57,15 +57,26 @@ if source_mode == "Local Directory":
         t_path = os.path.join(data_dir, "out_trackinfo.csv")
         r_path = os.path.join(data_dir, "track_hitlist_global.csv")
 
-        if os.path.exists(h_path) and os.path.exists(t_path) and os.path.exists(r_path):
+        # Debug info
+        missing = []
+        if not os.path.exists(h_path): missing.append("out_hitinfo.csv")
+        if not os.path.exists(t_path): missing.append("out_trackinfo.csv")
+        if not os.path.exists(r_path): missing.append("track_hitlist_global.csv")
+
+        if not missing:
             load_from_dir = True
             st.sidebar.success(f"Directory Valid: {data_dir}")
         else:
-            st.sidebar.error("Required files (out_hitinfo.csv, out_trackinfo.csv, track_hitlist_global.csv) not found.")
-            use_dummy = True
+            st.sidebar.error(f"Missing files: {', '.join(missing)}")
+            # Do NOT fallback to dummy automatically in this mode, user needs to know it failed
+            # But we need to handle 'hits_df' being None later
+            pass
     else:
-        st.sidebar.info("Please select a valid directory.")
-        use_dummy = True
+        if data_dir:
+            st.sidebar.error("Invalid Directory Path")
+        else:
+            st.sidebar.info("Please select a directory.")
+        # Do not use dummy data implicitly here
 
 else:
     # File Upload Mode
@@ -74,8 +85,10 @@ else:
     relation_file = st.sidebar.file_uploader("Relation Data (CSV)", type=["csv", "txt"])
 
     if not (hit_file and track_file and relation_file):
-        st.sidebar.info("Using Dummy Data (Upload files to override)")
-        use_dummy = True
+        st.sidebar.warning("Please upload all 3 files.")
+        # Optional: Add a specific "Load Demo Data" button if they want dummy data
+        if st.sidebar.button("Load Demo Data"):
+            use_dummy = True
 
 # 2. Radar Geometry
 st.sidebar.subheader("Radar Geometry")
@@ -141,14 +154,18 @@ def load_data(h_file, t_file, r_file, _use_dummy=False, _load_from_dir=False, _d
 
     return hits, tracks, relations, doppler_cols
 
-try:
-    hits_df, tracks_df, relations_df, doppler_cols = load_data(hit_file, track_file, relation_file, use_dummy, load_from_dir, data_dir)
-except Exception as e:
-    st.error(f"Error loading data: {e}")
-    st.stop()
+# Data Loading Logic
+if use_dummy or load_from_dir or (hit_file and track_file and relation_file):
+    try:
+        hits_df, tracks_df, relations_df, doppler_cols = load_data(hit_file, track_file, relation_file, use_dummy, load_from_dir, data_dir)
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        st.stop()
+else:
+    hits_df = None
 
 if hits_df is None:
-    st.warning("No data available. Please generate dummy data or upload files.")
+    st.info("Waiting for data... Please select a directory or upload files.")
     st.stop()
 
 # --- Preprocessing: Coordinate Transform ---

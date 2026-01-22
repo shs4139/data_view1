@@ -1,6 +1,7 @@
 import plotly.graph_objects as go
 import plotly.express as px
 import numpy as np
+import pandas as pd
 
 def plot_3d_tracks(tracks_df, hits_df=None, show_hits=True, x_range=None, y_range=None, z_range=None):
     """

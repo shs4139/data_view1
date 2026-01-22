@@ -46,6 +46,18 @@ def test_pipeline():
     hits['Z'] = z_w
     print("Geometry Transform OK.")
 
+    # Test Tilt
+    print("Testing Tilt...")
+    # Range 100, El 0, Tilt 90 -> El 90 -> Z = R (approx)
+    # factor = 7.629395 -> z ~ 762.9
+    # sin(90) = 1, cos(90) = 0. x, y should be 0.
+    x_t, y_t, z_t = calculate_coordinates(
+        np.array([100]), np.array([0]), np.array([0]),
+        radar_height=0, radar_direction=0, radar_tilt=90
+    )
+    assert np.isclose(z_t[0], 100 * 7.629395), f"Tilt logic failed: z={z_t[0]}"
+    print("Tilt Logic OK.")
+
     # 3. Merge
     print("Merging Data...")
     merged = merge_data(tracks, hits, relations, doppler_cols)

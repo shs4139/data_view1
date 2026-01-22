@@ -3,7 +3,7 @@ import numpy as np
 # Constant provided by user
 RANGE_CONVERSION_FACTOR = 7.629395
 
-def calculate_coordinates(range_vals, az_deg, el_deg, radar_height, radar_direction):
+def calculate_coordinates(range_vals, az_deg, el_deg, radar_height, radar_direction, radar_tilt=0.0):
     """
     Converts raw radar data to Cartesian coordinates based on user-provided logic.
 
@@ -12,7 +12,8 @@ def calculate_coordinates(range_vals, az_deg, el_deg, radar_height, radar_direct
         az_deg: Azimuth in degrees.
         el_deg: Elevation in degrees.
         radar_height: Height of the radar (m).
-        radar_direction: Direction offset of the radar (degrees).
+        radar_direction: Direction offset of the radar (degrees, adds to Azimuth).
+        radar_tilt: Tilt offset of the radar (degrees, adds to Elevation).
 
     Returns:
         x, y, z arrays in meters.
@@ -22,9 +23,9 @@ def calculate_coordinates(range_vals, az_deg, el_deg, radar_height, radar_direct
 
     # 2. Apply Angles (Degrees to Radians)
     # Azimuth = Input + Direction
-    # Elevation = Input
+    # Elevation = Input + Tilt
     az = np.radians(az_deg + radar_direction)
-    el = np.radians(el_deg)
+    el = np.radians(el_deg + radar_tilt)
 
     # 3. Spherical to Cartesian (User Formula)
     # x = r * cos(el) * sin(az)

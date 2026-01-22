@@ -93,7 +93,7 @@ else:
 # 2. Radar Geometry
 st.sidebar.subheader("Radar Geometry")
 radar_height = st.sidebar.number_input("Radar Height (m)", value=0.0)
-# Tilt removed as per new logic requirement
+radar_tilt = st.sidebar.number_input("Radar Tilt (deg, Elevation offset)", value=0.0)
 radar_dir = st.sidebar.number_input("Radar Direction (deg, Azimuth offset)", value=0.0)
 
 # 3. Filters
@@ -168,6 +168,12 @@ if hits_df is None:
     st.info("Waiting for data... Please select a directory or upload files.")
     st.stop()
 
+# Filter Invalid Hits
+if 'valid' in hits_df.columns:
+    # Assuming valid > 0 means valid.
+    # User data example had valid=2.
+    hits_df = hits_df[hits_df['valid'] > 0]
+
 # --- Preprocessing: Coordinate Transform ---
 st.sidebar.markdown("---")
 st.sidebar.text("Processing Coordinates...")
@@ -186,7 +192,8 @@ x_w, y_w, z_w = calculate_coordinates(
     hits_df['azimuth'].values,
     hits_df['elevation'].values,
     radar_height,
-    radar_dir
+    radar_dir,
+    radar_tilt
 )
 
 hits_df['X'] = x_w

@@ -21,6 +21,59 @@ def prepare_doppler_spectrogram(track_hits, doppler_cols):
 
     return spectrogram, time_labels
 
+def identify_static_tracks(merged_df, doppler_cols, center_bin=30, width=2, threshold=0.5):
+    """
+    Identifies tracks that are likely static clutter based on Doppler distribution.
+
+    Args:
+        merged_df: DataFrame containing merged Track and Hit data.
+        doppler_cols: List of column names for Doppler bins.
+        center_bin: The index of the Doppler bin representing zero/low velocity (default 30).
+        width: The range +/- around the center to consider as static (default 2).
+        threshold: The fraction of hits (0.0 to 1.0) that must be static to filter the track.
+
+    Returns:
+        valid_track_ids: List of TrackIDs that are NOT static.
+    """
+    if merged_df.empty or not doppler_cols:
+        return []
+
+    # 1. Calculate Peak Bin for each Hit
+    # Convert object to float if necessary, though argmax works on numeric types
+    # We use numpy argmax on the subset of columns
+    doppler_data = merged_df[doppler_cols].values
+
+    # Ensure numeric
+    # If mixed types, force cast. usually better to do this once during load, but safe here.
+    try:
+        doppler_data = doppler_data.astype(float)
+    except ValueError:
+        pass # Handle if needed
+
+    peak_bins = np.argmax(doppler_data, axis=1)
+
+    # 2. Check if Peak is Static
+    # Static if center - width <= peak <= center + width
+    is_static_hit = (peak_bins >= (center_bin - width)) & (peak_bins <= (center_bin + width))
+
+    # 3. Aggregate per Track
+    # Create a small temp DF
+    temp_df = pd.DataFrame({
+        'TrackID': merged_df['TrackID'],
+        'IsStatic': is_static_hit
+    })
+
+    # Group by TrackID
+    track_stats = temp_df.groupby('TrackID')['IsStatic'].agg(['mean', 'count'])
+    # 'mean' of boolean is the ratio of True (Static)
+
+    # 4. Filter
+    # If mean (ratio) > threshold, it is static.
+    # We want valid tracks (<= threshold)
+    valid_tracks = track_stats[track_stats['mean'] <= threshold].index.tolist()
+
+    return valid_tracks
+
 def analyze_tracks_ai(tracks_df):
     """
     Groups tracks by characteristics using K-Means.

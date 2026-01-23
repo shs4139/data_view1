@@ -7,7 +7,7 @@ from tkinter import filedialog
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
 from geometry import calculate_coordinates
 from visualizer import plot_3d_tracks, plot_2d_view, plot_doppler_spectrogram, plot_doppler_spectrum
-from analysis import prepare_doppler_spectrogram, analyze_tracks_ai
+from analysis import prepare_doppler_spectrogram, analyze_tracks_ai, identify_static_tracks
 from utils import generate_dummy_data
 
 st.set_page_config(page_title="Radar Data Analyst", layout="wide")
@@ -100,6 +100,17 @@ radar_dir = st.sidebar.number_input("Radar Direction (deg, Azimuth offset)", val
 st.sidebar.subheader("Filters")
 min_power = st.sidebar.number_input("Min Hit Power", value=0)
 min_velocity = st.sidebar.number_input("Min Track Velocity", value=0.0)
+
+st.sidebar.markdown("**Static/Clutter Filter (Doppler)**")
+enable_static_filter = st.sidebar.checkbox("Enable Static Filter", value=False)
+if enable_static_filter:
+    static_center = st.sidebar.number_input("Center Bin (0-59)", value=30, min_value=0, max_value=60)
+    static_width = st.sidebar.number_input("Width (+/- bins)", value=2, min_value=0)
+    static_threshold = st.sidebar.slider("Static Ratio Threshold (Filter if > X%)", 0.0, 1.0, 0.5)
+else:
+    static_center = 30
+    static_width = 2
+    static_threshold = 1.0 # No filtering
 
 # 4. Visualization Settings
 st.sidebar.subheader("Axis Ranges (Optional)")
@@ -220,6 +231,29 @@ if min_velocity > 0:
     tracks_df = tracks_df[tracks_df['TrackID'].isin(valid_track_ids)]
     # Also filter merged
     merged_df = merged_df[merged_df['TrackID'].isin(valid_track_ids)]
+
+# 3. Static/Clutter Filter (Doppler)
+if enable_static_filter and not merged_df.empty:
+    valid_static_ids = identify_static_tracks(
+        merged_df,
+        doppler_cols,
+        center_bin=static_center,
+        width=static_width,
+        threshold=static_threshold
+    )
+    # Filter
+    tracks_df = tracks_df[tracks_df['TrackID'].isin(valid_static_ids)]
+    merged_df = merged_df[merged_df['TrackID'].isin(valid_static_ids)]
+    # Filter hits_df as well to ensure consistency?
+    # hits_df is used for 3D plot "all hits". Usually we want to filter that too.
+    # Note: merged_df contains only hits associated with tracks.
+    # hits_df contains ALL hits (including unassociated).
+    # The requirement is "hide tracks".
+    # But usually clutter hits should also be hidden if they are part of those tracks.
+    # Unassociated hits are not filtered by TrackID.
+    # If we want to filter unassociated hits by Doppler, we'd need hit-level filtering.
+    # The requirement says "hide tracks with many such hits". So we strictly filter tracks.
+    pass
 
 # --- Global Statistics ---
 st.write(f"**Loaded:** {len(tracks_df['TrackID'].unique())} Tracks, {len(hits_df)} Hits (Filtered)")

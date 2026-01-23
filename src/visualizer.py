@@ -58,7 +58,7 @@ def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range
     """
     Creates a 2D scatter plot (Top or Side View).
     view_type: 'top' (X-Y) or 'side' (X-Z)
-    show_connections: If True, draws lines between track points and associated hits (filtered).
+    show_connections: Deprecated/ignored in this version (logic moved to app.py).
     """
     fig = go.Figure()
 
@@ -92,56 +92,8 @@ def plot_2d_view(tracks_df, hits_df=None, view_type='top', x_range=None, y_range
             marker=dict(size=3, color='gray', opacity=0.5)
         ))
 
-        # Connections
-        if show_connections and not tracks_df.empty and not hits_df.empty:
-            # Optimize: Merge tracks and hits on ScanNum to find pairs
-            # This avoids the slow row-by-row iteration and filtering
-
-            # We need to distinguish columns, so we use suffixes
-            # Note: We only care about matching ScanNum.
-            # If hits_df contains hits for multiple tracks, this might cross-connect if tracks share ScanNums.
-            # However, typically hits_df is passed as 'track_hits_subset' which is already filtered for a single track.
-
-            merged_conn = pd.merge(tracks_df, hits_df, on='ScanNum', suffixes=('_t', '_h'))
-
-            if not merged_conn.empty:
-                # Vectorized construction of line segments
-                # We need [x_t1, x_h1, None, x_t2, x_h2, None, ...]
-
-                # Extract coordinates based on view type cols (x_col, y_col are local to this function but refer to X, Y or X, Z)
-                # tracks_df columns: X, Y, Z -> X_t, Y_t, Z_t in merge
-                # hits_df columns: X, Y, Z -> X_h, Y_h, Z_h in merge
-
-                # Map x_col/y_col to merged columns
-                # If x_col is 'X', look for 'X_t' and 'X_h'
-
-                tx_col = x_col + '_t'
-                ty_col = y_col + '_t'
-                hx_col = x_col + '_h'
-                hy_col = y_col + '_h'
-
-                # Check if columns exist (they should)
-                if tx_col in merged_conn.columns:
-                    tx = merged_conn[tx_col].values
-                    ty = merged_conn[ty_col].values
-                    hx = merged_conn[hx_col].values
-                    hy = merged_conn[hy_col].values
-
-                    # Interleave arrays: [tx[0], hx[0], None, tx[1], hx[1], None ...]
-                    # Create array of Nones
-                    nones = np.full(len(tx), None)
-
-                    # Stack and flatten
-                    # Stack: [[tx0, hx0, None], [tx1, hx1, None], ...]
-                    conn_x = np.column_stack((tx, hx, nones)).flatten()
-                    conn_y = np.column_stack((ty, hy, nones)).flatten()
-
-                    fig.add_trace(go.Scatter(
-                        x=conn_x, y=conn_y,
-                        mode='lines',
-                        line=dict(color='rgba(200,200,200,0.5)', width=1),
-                        name='Association'
-                    ))
+        # Connections logic removed (handled in app.py)
+        pass
 
     # Layout
     layout_args = dict(

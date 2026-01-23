@@ -335,6 +335,45 @@ with tab1:
 
         fig_top = plot_2d_view(tracks_2d, hits_2d, view_type='top', x_range=x_range, y_range=y_range,
                                show_connections=(selected_track_id is not None))
+        # Add visual lines connecting Track Points to Hits
+        t_data = plot_tracks[plot_tracks['TrackID'] == selected_track_id]
+
+        import plotly.graph_objects as go
+
+        # Add connection lines
+        connector_x = []
+        connector_y = []
+
+        # If playback is enabled, we only want connections for the current scan (if track exists in this scan)
+        if enable_playback:
+            t_scan = t_data[t_data['ScanNum'] == current_scan]
+            # If track exists in this scan
+            if not t_scan.empty:
+                # Use just this row
+                iter_data = t_scan
+            else:
+                iter_data = pd.DataFrame()
+        else:
+            iter_data = t_data
+
+        for _, t_row in iter_data.iterrows():
+            scan = t_row['ScanNum']
+            h_data = track_hits_subset[track_hits_subset['ScanNum'] == scan]
+
+            tx, ty = t_row['X'], t_row['Y']
+
+            for _, h_row in h_data.iterrows():
+                hx, hy = h_row['X'], h_row['Y']
+                connector_x.extend([tx, hx, None])
+                connector_y.extend([ty, hy, None])
+
+        if connector_x:
+            fig_top.add_trace(go.Scatter(
+                x=connector_x, y=connector_y,
+                mode='lines',
+                line=dict(color='rgba(200,200,200,0.5)', width=1),
+                name='Association'
+            ))
         st.plotly_chart(fig_top, use_container_width=True)
 
     with col2d_2:
@@ -343,6 +382,45 @@ with tab1:
 
         fig_side = plot_2d_view(tracks_2d, hits_2d, view_type='side', x_range=x_range, z_range=z_range,
                                 show_connections=(selected_track_id is not None))
+        # Add visual lines connecting Track Points to Hits
+        t_data = plot_tracks[plot_tracks['TrackID'] == selected_track_id]
+
+        import plotly.graph_objects as go
+
+        # Add connection lines
+        connector_x = []
+        connector_z = []
+
+        # If playback is enabled, we only want connections for the current scan (if track exists in this scan)
+        if enable_playback:
+            t_scan = t_data[t_data['ScanNum'] == current_scan]
+            # If track exists in this scan
+            if not t_scan.empty:
+                # Use just this row
+                iter_data = t_scan
+            else:
+                iter_data = pd.DataFrame()
+        else:
+            iter_data = t_data
+
+        for _, t_row in iter_data.iterrows():
+            scan = t_row['ScanNum']
+            h_data = track_hits_subset[track_hits_subset['ScanNum'] == scan]
+
+            tx, tz = t_row['X'], t_row['Z']
+
+            for _, h_row in h_data.iterrows():
+                hx, hz = h_row['X'], h_row['Z']
+                connector_x.extend([tx, hx, None])
+                connector_z.extend([tz, hz, None])
+
+        if connector_x:
+            fig_side.add_trace(go.Scatter(
+                x=connector_x, y=connector_z,
+                mode='lines',
+                line=dict(color='rgba(200,200,200,0.5)', width=1),
+                name='Association'
+            ))
         st.plotly_chart(fig_side, use_container_width=True)
 
 # === Tab 2: Doppler Analysis ===

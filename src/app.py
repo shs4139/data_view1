@@ -365,7 +365,7 @@ with tab1:
         # Show all hits (filtered by playback)
         fig = plot_3d_tracks(plot_tracks, plot_hits, show_hits=True, x_range=x_range, y_range=y_range, z_range=z_range)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # 2D Views
     st.markdown("### 2D Projections")
@@ -419,7 +419,7 @@ with tab1:
                 line=dict(color='rgba(200,200,200,0.5)', width=1),
                 name='Association'
             ))
-        st.plotly_chart(fig_top, use_container_width=True)
+        st.plotly_chart(fig_top, width="stretch")
 
     with col2d_2:
         hits_2d = track_hits_subset if selected_track_id else plot_hits
@@ -466,7 +466,7 @@ with tab1:
                 line=dict(color='rgba(200,200,200,0.5)', width=1),
                 name='Association'
             ))
-        st.plotly_chart(fig_side, use_container_width=True)
+        st.plotly_chart(fig_side, width="stretch")
 
 # === Tab 2: Doppler Analysis ===
 with tab2:
@@ -481,7 +481,7 @@ with tab2:
             # 1. STFT (Spectrogram)
             spectrogram, time_labels = prepare_doppler_spectrogram(track_hits_subset, doppler_cols)
             st.write("### Track Spectrogram (STFT)")
-            st.plotly_chart(plot_doppler_spectrogram(spectrogram, time_labels), use_container_width=True)
+            st.plotly_chart(plot_doppler_spectrogram(spectrogram, time_labels), width="stretch")
 
             # 2. Point-wise Inspection
             st.write("### Point-wise Doppler Inspection")
@@ -495,7 +495,7 @@ with tab2:
                 d_vals = hit[doppler_cols].values
 
                 with cols[idx % 2]:
-                    st.plotly_chart(plot_doppler_spectrum(d_vals, title=f"Hit {hit['hitId']} (Scan {selected_scan})"), use_container_width=True)
+                    st.plotly_chart(plot_doppler_spectrum(d_vals, title=f"Hit {hit['hitId']} (Scan {selected_scan})"), width="stretch")
 
     else:
         st.info("Please select a Track ID in the sidebar or Tab 1 to view Doppler analysis.")
@@ -527,7 +527,7 @@ with tab3:
                 hover_data=['TrackID'],
                 title="Clustering Result: Velocity vs Altitude"
             )
-            st.plotly_chart(fig_ai, use_container_width=True)
+            st.plotly_chart(fig_ai, width="stretch")
 
         st.markdown("""
         **Methodology:**

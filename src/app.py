@@ -7,7 +7,7 @@ from tkinter import filedialog
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
 from geometry import calculate_coordinates
 from visualizer import plot_3d_tracks, plot_2d_view, plot_doppler_spectrogram, plot_doppler_spectrum
-from analysis import prepare_doppler_spectrogram, analyze_tracks_ai, identify_static_tracks, identify_static_hits
+from analysis import prepare_doppler_spectrogram, analyze_tracks_ai, identify_static_tracks, identify_static_hits, calculate_doppler_statistics
 from utils import generate_dummy_data
 
 st.set_page_config(page_title="Radar Data Analyst", layout="wide")
@@ -483,6 +483,13 @@ with tab2:
             st.write("### Track Spectrogram (STFT)")
             st.plotly_chart(plot_doppler_spectrogram(spectrogram, time_labels), width="stretch")
 
+            # Stats for Track
+            st.write("#### Doppler Statistics (Entire Track)")
+            # Use all doppler data for this track
+            track_doppler_data = track_hits_subset[doppler_cols].values
+            track_stats = calculate_doppler_statistics(track_doppler_data)
+            st.dataframe(track_stats, use_container_width=True)
+
             # 2. Point-wise Inspection
             st.write("### Point-wise Doppler Inspection")
             selected_scan = st.selectbox("Select Scan Number", sorted(track_hits_subset['ScanNum'].unique()))
@@ -496,6 +503,11 @@ with tab2:
 
                 with cols[idx % 2]:
                     st.plotly_chart(plot_doppler_spectrum(d_vals, title=f"Hit {hit['hitId']} (Scan {selected_scan})"), width="stretch")
+
+                    # Stats for Hit
+                    st.write(f"**Statistics - Hit {hit['hitId']}**")
+                    hit_stats = calculate_doppler_statistics(d_vals)
+                    st.dataframe(hit_stats, use_container_width=True)
 
     else:
         st.info("Please select a Track ID in the sidebar or Tab 1 to view Doppler analysis.")

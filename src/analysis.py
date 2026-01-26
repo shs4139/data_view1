@@ -21,6 +21,38 @@ def prepare_doppler_spectrogram(track_hits, doppler_cols):
 
     return spectrogram, time_labels
 
+def calculate_doppler_statistics(doppler_data):
+    """
+    Calculates statistical properties of Doppler data.
+    Input: numpy array of raw Doppler values (linear).
+    Output: pandas DataFrame with statistics in dB.
+    """
+    if doppler_data is None or doppler_data.size == 0:
+        return pd.DataFrame()
+
+    # Ensure numeric and flat
+    try:
+        data = doppler_data.astype(float).flatten()
+    except ValueError:
+        return pd.DataFrame()
+
+    # Convert to dB
+    epsilon = 1e-9
+    data_db = 20 * np.log10(np.abs(data) + epsilon)
+
+    stats = {
+        "Metric": ["Mean (dB)", "Std Dev (dB)", "Min (dB)", "Max (dB)", "Median (dB)"],
+        "Value": [
+            np.mean(data_db),
+            np.std(data_db),
+            np.min(data_db),
+            np.max(data_db),
+            np.median(data_db)
+        ]
+    }
+
+    return pd.DataFrame(stats)
+
 def identify_static_hits(hits_df, doppler_cols, center_bin=30, width=2):
     """
     Identifies hits that are likely static clutter based on Doppler distribution.

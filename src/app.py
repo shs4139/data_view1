@@ -7,8 +7,9 @@ from tkinter import filedialog
 from data_loader import load_hit_data, load_track_data, load_relation_data, merge_data
 from geometry import calculate_coordinates
 from visualizer import plot_3d_tracks, plot_2d_view, plot_doppler_spectrogram, plot_doppler_spectrum
-from analysis import prepare_doppler_spectrogram, analyze_tracks_ai, identify_static_tracks, identify_static_hits, calculate_doppler_statistics
+from analysis import prepare_doppler_spectrogram, analyze_tracks_ai, identify_static_tracks, identify_static_hits, calculate_doppler_statistics, calculate_track_statistics_batch
 from utils import generate_dummy_data
+import plotly.express as px
 
 st.set_page_config(page_title="Radar Data Analyst", layout="wide")
 
@@ -270,7 +271,7 @@ if filter_static_tracks and not merged_df.empty:
 st.write(f"**Loaded:** {len(tracks_df['TrackID'].unique())} Tracks, {len(hits_df)} Hits (Filtered)")
 
 # --- Tabs ---
-tab1, tab2, tab3, tab4 = st.tabs(["3D Visualization", "Doppler Analysis", "AI Classification", "Data Export"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["3D Visualization", "Doppler Analysis", "Track Statistics", "AI Classification", "Data Export"])
 
 # === Tab 1: 3D Visualization ===
 with tab1:
@@ -512,8 +513,58 @@ with tab2:
     else:
         st.info("Please select a Track ID in the sidebar or Tab 1 to view Doppler analysis.")
 
-# === Tab 3: AI Classification ===
+# === Tab 3: Track Statistics ===
 with tab3:
+    st.subheader("Global Track Statistics")
+
+    if merged_df is not None and not merged_df.empty:
+        # 1. Global Table
+        with st.spinner("Calculating statistics for all tracks..."):
+            all_track_stats = calculate_track_statistics_batch(merged_df, doppler_cols)
+
+        st.write("#### Doppler Statistics per Track (dB)")
+        st.dataframe(all_track_stats, use_container_width=True)
+
+        st.markdown("---")
+        st.subheader("Track Comparison")
+
+        # 2. Comparison Plots
+        # Multi-select for tracks
+        all_ids = sorted(all_track_stats.index.unique())
+
+        # Default selection: Top 5 by Mean dB or currently selected track
+        default_sel = []
+        if selected_track_id in all_ids:
+            default_sel.append(selected_track_id)
+        else:
+            default_sel = all_ids[:5]
+
+        compare_ids = st.multiselect("Select Tracks to Compare", all_ids, default=default_sel)
+
+        if compare_ids:
+            subset_stats = all_track_stats.loc[compare_ids].reset_index()
+
+            # Metric Selector
+            metric_opts = [c for c in all_track_stats.columns if c != 'TrackID']
+            selected_metric = st.selectbox("Select Metric to Visualize", metric_opts, index=0)
+
+            # Bar Chart
+            fig_comp = px.bar(
+                subset_stats,
+                x='TrackID',
+                y=selected_metric,
+                color='TrackID',
+                title=f"Comparison of {selected_metric}"
+            )
+            st.plotly_chart(fig_comp, width="stretch")
+        else:
+            st.info("Select tracks to see comparison.")
+
+    else:
+        st.info("No track data available.")
+
+# === Tab 4: AI Classification ===
+with tab4:
     st.subheader("AI Object Classification")
 
     if st.button("Run Classification Analysis"):
@@ -548,8 +599,8 @@ with tab3:
         - **Purpose**: Group unidentified tracks into potential classes (e.g., Birds, Drones, Aircraft) based on kinematics.
         """)
 
-# === Tab 4: Data Export ===
-with tab4:
+# === Tab 5: Data Export ===
+with tab5:
     st.subheader("Data Export")
 
     if selected_track_id:

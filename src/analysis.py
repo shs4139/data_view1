@@ -53,6 +53,50 @@ def calculate_doppler_statistics(doppler_data):
 
     return pd.DataFrame(stats)
 
+def calculate_track_statistics_batch(merged_df, doppler_cols):
+    """
+    Calculates Doppler statistics for all tracks in the merged dataframe.
+    Input: merged_df (Tracks + Hits), doppler_cols list
+    Output: pandas DataFrame indexed by TrackID with statistics columns.
+    """
+    if merged_df.empty or not doppler_cols:
+        return pd.DataFrame()
+
+    epsilon = 1e-9
+
+    stats_list = []
+
+    # Group by TrackID
+    # Optimization: If dataset is huge, this might be slow.
+    # But for radar track data it's usually manageable.
+    grouped = merged_df.groupby('TrackID')
+
+    for tid, group in grouped:
+        # Extract Doppler data
+        d_data = group[doppler_cols].values
+
+        try:
+            d_data = d_data.astype(float).flatten()
+        except ValueError:
+            continue
+
+        # Convert to dB
+        d_db = 20 * np.log10(np.abs(d_data) + epsilon)
+
+        stats_list.append({
+            'TrackID': tid,
+            'Mean_dB': np.mean(d_db),
+            'Std_dB': np.std(d_db),
+            'Min_dB': np.min(d_db),
+            'Max_dB': np.max(d_db),
+            'Median_dB': np.median(d_db)
+        })
+
+    if not stats_list:
+        return pd.DataFrame()
+
+    return pd.DataFrame(stats_list).set_index('TrackID')
+
 def identify_static_hits(hits_df, doppler_cols, center_bin=30, width=2):
     """
     Identifies hits that are likely static clutter based on Doppler distribution.
